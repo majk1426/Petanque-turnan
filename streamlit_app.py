@@ -15,25 +15,27 @@ def zobraz_logo():
         st.subheader(KLUB_NAZEV)
 
 # --- GENEROVÁNÍ PDF (S ČEŠTINOU) ---
+# --- OPRAVENÉ GENEROVÁNÍ PDF (BEZ TUČNÉHO PÍSMA, ABY TO NESPADLO) ---
 def vytvor_pdf(df, nazev_akce, typ="vysledky"):
     pdf = FPDF()
     pdf.add_page()
     
-    # Registrace a nastavení českého fontu
+    # Registrace fontu - používáme pouze základní variantu
     if os.path.exists("DejaVuSans.ttf"):
         pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
-        pdf.set_font('DejaVu', '', 14)
+        pismo = 'DejaVu'
     else:
-        # Záložní řešení, pokud by font chyběl (bez diakritiky)
-        pdf.set_font('Arial', 'B', 14)
+        pismo = 'Arial'
 
-    # Hlavička s logem (pokud existuje)
+    pdf.set_font(pismo, '', 14)
+
+    # Hlavička s logem
     if os.path.exists("logo.jpg"):
         pdf.image("logo.jpg", 10, 8, 33)
         pdf.set_x(45)
     
     pdf.cell(0, 10, KLUB_NAZEV, ln=True)
-    pdf.set_font('DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial', '', 10)
+    pdf.set_font(pismo, '', 10)
     pdf.set_x(45)
     pdf.cell(0, 10, f"{typ.capitalize()}: {nazev_akce}", ln=True)
     pdf.ln(15)
@@ -43,12 +45,12 @@ def vytvor_pdf(df, nazev_akce, typ="vysledky"):
     if typ == "vysledky":
         cols = ["Poř.", "Tým", "V", "S+", "S-", "Diff"]
         widths = [15, 80, 20, 25, 25, 25]
-        # Data z DataFrame
-        pdf.set_font('DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial', 'B', 10)
+        
+        pdf.set_font(pismo, '', 10) 
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, fill=True)
         pdf.ln()
-        pdf.set_font('DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial', '', 10)
+        
         for i, row in df.iterrows():
             pdf.cell(widths[0], 10, str(i), border=1)
             pdf.cell(widths[1], 10, str(row['Tým']), border=1)
@@ -60,15 +62,19 @@ def vytvor_pdf(df, nazev_akce, typ="vysledky"):
     else:
         cols = ["Kolo", "Tým 1", "Tým 2", "S1", "S2"]
         widths = [20, 65, 65, 20, 20]
-        pdf.set_font('DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial', 'B', 10)
+        pdf.set_font(pismo, '', 10)
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, fill=True)
         pdf.ln()
-        pdf.set_font('DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial', '', 10)
         for _, row in df.iterrows():
             pdf.cell(widths[0], 10, str(row['Kolo']), border=1)
             pdf.cell(widths[1], 10, str(row['Tým 1']), border=1)
             pdf.cell(widths[2], 10, str(row['Tým 2']), border=1)
+            pdf.cell(widths[3], 10, str(row['S1']), border=1)
+            pdf.cell(widths[4], 10, str(row['S2']), border=1)
+            pdf.ln()
+
+    return pdf.output(dest='S')
             pdf.cell(widths[3], 10, str(row['S1']), border=1)
             pdf.cell(widths[4], 10, str(row['S2']), border=1)
             pdf.ln()
