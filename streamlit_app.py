@@ -1,43 +1,28 @@
 import streamlit as st
 import pandas as pd
+from fpdf import FPDF
+import base64
 
-# Nastavení vzhledu stránky
-st.set_page_config(page_title="Pétanque Hradec Králové", layout="wide")
+# --- NASTAVENÍ ---
+KLUB_NAZEV = "Club přátel pétanque HK"
+st.set_page_config(page_title=KLUB_NAZEV, layout="wide")
 
-# Záhlaví s názvem klubu - OPRAVENO (správný parametr)
-st.markdown("<h3 style='text-align: center; color: #555;'>Club přátel pétanque Hradec Králové</h3>", unsafe_allow_html=True)
+# Funkce pro zobrazení loga (pokud je soubor v repozitáři)
+def zobraz_logo():
+    try:
+        st.image("logo.jpg", width=150) # Ujisti se, že se soubor jmenuje logo.jpg
+    except:
+        st.write(f"### {KLUB_NAZEV}")
 
-# Inicializace stavu
-if 'tymy' not in st.session_state:
-    st.session_state.tymy = []
-if 'kolo' not in st.session_state:
-    st.session_state.kolo = 0
-if 'system' not in st.session_state:
-    st.session_state.system = "Švýcarský systém"
-if 'rozpis_vsech_kol' not in st.session_state:
-    st.session_state.rozpis_vsech_kol = []
-if 'nazev_akce' not in st.session_state:
-    st.session_state.nazev_akce = "Pohár Hradce Králové"
-if 'historie_zapasu' not in st.session_state:
-    st.session_state.historie_zapasu = []
+# CSS pro skrytí Buchholze v tabulce pro uživatele
+hide_table_row_index = """
+            <style>
+            thead tr th:first-child {display:none}
+            tbody th {display:none}
+            </style>
+            """
 
-# Funkce pro Round Robin
-def generuj_round_robin(seznam_tymu):
-    tymy = list(seznam_tymu)
-    if len(tymy) % 2 != 0:
-        tymy.append("VOLNÝ LOS (BYE)")
-    n = len(tymy)
-    kola = []
-    indexy = list(range(n))
-    for i in range(n - 1):
-        parovani = []
-        for j in range(n // 2):
-            parovani.append((tymy[indexy[j]], tymy[indexy[n - 1 - j]]))
-        kola.append(parovani)
-        indexy.insert(1, indexy.pop())
-    return kola
-
-# Funkce pro výpočet Buchholze
+# --- POMOCNÉ FUNKCE ---
 def vypocti_buchholz(tym_jmeno, df_tymy, historie):
     souperi = []
     for k, t1, t2, s1, s2 in historie:
@@ -50,65 +35,85 @@ def vypocti_buchholz(tym_jmeno, df_tymy, historie):
             bhz += shoda.iloc[0]["Výhry"]
     return bhz
 
-# --- 1. NASTAVENÍ TURNAJE ---
-if st.session_state.kolo == 0:
-    st.title("🏆 Nový turnaj")
-    st.session_state.nazev_akce = st.text_input("Název turnaje:", value="Pohár Hradce Králové")
-    st.session_state.system = st.radio("Zvolte herní systém:", ["Švýcarský systém", "Každý s každým"])
+def vytvor_pdf_vysledky(df, nazev_akce):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.add_font('DejaVu', '', 'https://github.com/reingart/pyfpdf/raw/master/font/DejaVuSans.ttf', uni=True)
+    pdf.set_font('DejaVu', '', 16)
+    pdf.cell(190, 10, txt=f"{KLUB_NAZEV}", ln=True, align='C')
+    pdf.set_font('DejaVu', '', 14)
+    pdf.cell(190, 10, txt=f"Výsledky: {nazev_akce}", ln=True, align='C')
+    pdf.ln(10)
+    pdf.set_font('DejaVu', '', 10)
     
-    col_a, col_b = st.columns(2)
-    with col_a:
-        vstup = st.text_area("Seznam týmů (každý na nový řádek):", height=200)
-    with col_b:
-        if st.session_state.system == "Švýcarský systém":
-            st.session_state.max_kol = st.number_input("Počet kol:", min_value=1, max_value=12, value=3)
-        else:
-            st.info("Počet kol bude určen automaticky podle počtu týmů.")
+    # Hlavička tabulky (bez BHZ)
+    cols = ["Pořadí", "Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]
+    for col in cols:
+        pdf.cell(30, 10, col, border=1)
+    pdf.ln()
+    
+    for i, row in df.iterrows():
+        pdf.cell(30, 10, str(i), border=1)
+        pdf.cell(30, 10, str(row['Tým']), border=1)
+        pdf.cell(30, 10, str(row['Výhry']), border=1)
+        pdf.cell(30, 10, str(row['Skóre +']), border=1)
+        pdf.cell(30, 10, str(row['Skóre -']), border=1)
+        pdf.cell(30, 10, str(row['Rozdíl']), border=1)
+        pdf.ln()
+    return pdf.output(dest='S').encode('latin-1', errors='ignore')
 
-    if st.button("Zahájit turnaj", type="primary", use_container_width=True):
+# --- INICIALIZACE STAVU ---
+if 'tymy' not in st.session_state:
+    st.session_state.tymy = []
+if 'kolo' not in st.session_state:
+    st.session_state.kolo = 0
+if 'historie_zapasu' not in st.session_state:
+    st.session_state.historie_zapasu = []
+
+# --- 1. ÚVODNÍ NASTAVENÍ ---
+if st.session_state.kolo == 0:
+    zobraz_logo()
+    st.title("🏆 Turnajový manažer")
+    st.session_state.nazev_akce = st.text_input("Název turnaje:", value="Hradecká koule")
+    st.session_state.system = st.radio("Herní systém:", ["Švýcarský systém", "Každý s každým"])
+    
+    vstup = st.text_area("Seznam týmů (každý na nový řádek):")
+    max_kol_input = st.number_input("Počet kol:", 1, 10, 3)
+
+    if st.button("Zahájit turnaj", type="primary"):
         seznam = [s.strip() for s in vstup.split('\n') if s.strip()]
-        if len(seznam) < 2:
-            st.error("Zadejte aspoň 2 týmy!")
-        else:
+        if len(seznam) >= 2:
             tymy_data = [{"Tým": j, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for j in seznam]
             if len(tymy_data) % 2 != 0:
                 tymy_data.append({"Tým": "VOLNÝ LOS (BYE)", "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0})
-            
             st.session_state.tymy = pd.DataFrame(tymy_data)
             st.session_state.kolo = 1
-            if st.session_state.system == "Každý s každým":
-                st.session_state.rozpis_vsech_kol = generuj_round_robin(st.session_state.tymy["Tým"].tolist())
-                st.session_state.max_kol = len(st.session_state.rozpis_vsech_kol)
+            st.session_state.max_kol = max_kol_input
             st.rerun()
 
 # --- 2. PRŮBĚH TURNAJE ---
 elif st.session_state.kolo <= st.session_state.max_kol:
-    st.title(f"🏟️ {st.session_state.nazev_akce}")
-    st.subheader(f"Kolo {st.session_state.kolo} z {st.session_state.max_kol} ({st.session_state.system})")
+    zobraz_logo()
+    st.header(f"🏟️ {st.session_state.nazev_akce}")
+    st.subheader(f"Kolo {st.session_state.kolo} z {st.session_state.max_kol}")
 
-    # Aktualizace Buchholze pro průběžnou tabulku
+    # Výpočet pořadí (pro rozlosování)
     for i, row in st.session_state.tymy.iterrows():
         st.session_state.tymy.at[i, "Buchholz"] = vypocti_buchholz(row["Tým"], st.session_state.tymy, st.session_state.historie_zapasu)
+        st.session_state.tymy.at[i, "Rozdíl"] = row["Skóre +"] - row["Skóre -"]
     
-    # Boční panel s pořadím - OPRAVENO (správné názvy sloupců)
     side_df = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
-    side_df.index += 1
-    st.sidebar.header("Průběžné pořadí")
-    st.sidebar.table(side_df[["Tým", "Výhry", "Buchholz"]])
-
-    # Rozpis zápasů
-    if st.session_state.system == "Každý s každým":
-        aktualni_rozpis = st.session_state.rozpis_vsech_kol[st.session_state.kolo - 1]
-    else:
-        serazene = side_df["Tým"].tolist()
-        aktualni_rozpis = [(serazene[i], serazene[i+1]) for i in range(0, len(serazene), 2)]
+    
+    # Rozlosování Švýcar
+    serazene = side_df["Tým"].tolist()
+    aktualni_rozpis = [(serazene[i], serazene[i+1]) for i in range(0, len(serazene), 2)]
 
     vysledky_kola = []
     for idx, (t1, t2) in enumerate(aktualni_rozpis):
         with st.expander(f"Zápas {idx+1}: {t1} vs {t2}", expanded=True):
             if "VOLNÝ LOS" in t1 or "VOLNÝ LOS" in t2:
-                vitez_bye = t1 if "VOLNÝ LOS" in t2 else t2
-                st.write(f"⚪ {vitez_bye} má volno (13:0)")
+                vitez = t1 if "VOLNÝ LOS" in t2 else t2
+                st.write(f"⚪ {vitez} má volno (13:0)")
                 vysledky_kola.append((t1, t2, (13 if "VOLNÝ LOS" in t2 else 0), (13 if "VOLNÝ LOS" in t1 else 0)))
             else:
                 c1, c2 = st.columns(2)
@@ -116,7 +121,8 @@ elif st.session_state.kolo <= st.session_state.max_kol:
                 s2 = c2.number_input(f"{t2}", 0, 13, 0, key=f"s2_{idx}_{st.session_state.kolo}")
                 vysledky_kola.append((t1, t2, s1, s2))
 
-    if st.button("Uložit kolo a pokračovat", type="primary", use_container_width=True):
+    col1, col2 = st.columns(2)
+    if col1.button("Uložit kolo a pokračovat", type="primary", use_container_width=True):
         for t1, t2, s1, s2 in vysledky_kola:
             idx1 = st.session_state.tymy[st.session_state.tymy["Tým"] == t1].index[0]
             idx2 = st.session_state.tymy[st.session_state.tymy["Tým"] == t2].index[0]
@@ -129,23 +135,31 @@ elif st.session_state.kolo <= st.session_state.max_kol:
             st.session_state.historie_zapasu.append((st.session_state.kolo, t1, t2, s1, s2))
         st.session_state.kolo += 1
         st.rerun()
+    
+    if col2.button("⚠️ Opravit výsledky tohoto kola", use_container_width=True):
+        st.session_state.historie_zapasu = [h for h in st.session_state.historie_zapasu if h[0] != st.session_state.kolo]
+        st.warning("Výsledky kola byly smazány. Zadejte je znovu a uložte.")
 
 # --- 3. KONEC TURNAJE ---
 else:
+    zobraz_logo()
     st.balloons()
     st.title(f"🏁 {st.session_state.nazev_akce} - KONEC")
+    
     for i, row in st.session_state.tymy.iterrows():
         st.session_state.tymy.at[i, "Buchholz"] = vypocti_buchholz(row["Tým"], st.session_state.tymy, st.session_state.historie_zapasu)
-    
+        st.session_state.tymy.at[i, "Rozdíl"] = row["Skóre +"] - row["Skóre -"]
+
     final_df = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
     final_df.index += 1
-    st.header("Konečné pořadí")
-    st.table(final_df)
     
-    with st.expander("Zobrazit kompletní historii zápasů"):
-        hist_df = pd.DataFrame(st.session_state.historie_zapasu, columns=["Kolo", "Tým 1", "Tým 2", "Body 1", "Body 2"])
-        st.table(hist_df)
+    st.header("Konečné pořadí")
+    # Zobrazení tabulky bez Buchholze pro uživatele
+    st.table(final_df[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
 
-    if st.button("Začít nový turnaj"):
+    with st.expander("Kompletní historie zápasů"):
+        st.table(pd.DataFrame(st.session_state.historie_zapasu, columns=["Kolo", "Tým 1", "Tým 2", "S1", "S2"]))
+
+    if st.button("Nový turnaj"):
         st.session_state.clear()
         st.rerun()
