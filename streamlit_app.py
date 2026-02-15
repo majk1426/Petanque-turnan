@@ -13,6 +13,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def uloz_do_google():
     stav = {
         "nazev_akce": st.session_state.nazev_akce,
+        "datum_akce": st.session_state.get("datum_akce", ""),
         "kolo": st.session_state.kolo,
         "max_kol": st.session_state.max_kol,
         "system": st.session_state.system,
@@ -37,6 +38,7 @@ if "kolo" not in st.session_state:
     data = nacti_z_google()
     if data:
         st.session_state.nazev_akce = data.get("nazev_akce", "Pétanque Turnaj")
+        st.session_state.datum_akce = data.get("datum_akce", "")
         st.session_state.kolo = data.get("kolo", 0)
         st.session_state.max_kol = data.get("max_kol", 3)
         st.session_state.system = data.get("system", "Švýcar")
@@ -44,6 +46,7 @@ if "kolo" not in st.session_state:
         st.session_state.historie = data.get("historie", [])
     else:
         st.session_state.nazev_akce = "Pétanque Turnaj"
+        st.session_state.datum_akce = ""
         st.session_state.kolo = 0
         st.session_state.max_kol = 3
         st.session_state.system = "Švýcar"
@@ -62,23 +65,36 @@ def prepocitej_buchholz():
         nove_buchholzy.append(int(b_skore))
     st.session_state.tymy["Buchholz"] = nove_buchholzy
 
-# --- PDF EXPORT (OPRAVENÝ VÝSTUP) ---
+# --- PDF EXPORT (LOGO + DATUM + ČEŠTINA + HISTORIE) ---
 def export_pdf():
     pdf = FPDF()
     pdf.add_page()
     font_path = "DejaVuSans.ttf"
+    logo_path = "logo.jpg"
     
+    # 1. LOGO
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=10, y=8, w=30)
+    
+    # 2. FONT
     if os.path.exists(font_path):
         pdf.add_font("DejaVu", "", font_path, uni=True)
-        pdf.set_font("DejaVu", "", 14)
+        pdf.set_font("DejaVu", "", 16)
         use_font = "DejaVu"
     else:
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Arial", "B", 16)
         use_font = "Arial"
 
-    pdf.cell(190, 10, f"Výsledky: {st.session_state.nazev_akce}", ln=True, align="C")
-    pdf.ln(5)
+    # 3. HLAVIČKA
+    pdf.set_y(15)
+    pdf.cell(190, 10, f"{st.session_state.nazev_akce}", ln=True, align="C")
+    pdf.set_font(use_font, "", 11)
+    if st.session_state.datum_akce:
+        pdf.cell(190, 8, f"Datum: {st.session_state.datum_akce}", ln=True, align="C")
+    pdf.ln(10)
     
+    # 4. TABULKA POŘADÍ
+    pdf.set_font(use_font, "", 12)
     pdf.cell(190, 10, "Konečné pořadí:", ln=True)
     pdf.set_font(use_font, "", 10)
     
@@ -90,6 +106,7 @@ def export_pdf():
             line = line.translate(str.maketrans("áéěíóúůýčďňřšťžÁÉĚÍÓÚŮÝČĎŇŘŠŤŽ", "aeeiouuycdnrstzAEEIOUUYCDNRSTZ"))
         pdf.cell(190, 7, line, ln=True)
     
+    # 5. HISTORIE ZÁPASŮ
     pdf.ln(10)
     pdf.set_font(use_font, "", 12)
     pdf.cell(190, 10, "Přehled všech zápasů:", ln=True)
@@ -100,7 +117,6 @@ def export_pdf():
             line = line.translate(str.maketrans("áéěíóúůýčďňřšťžÁÉĚÍÓÚŮÝČĎŇŘŠŤŽ", "aeeiouuycdnrstzAEEIOUUYCDNRSTZ"))
         pdf.cell(190, 6, line, ln=True)
         
-    # Změna: převedení na bytes pomocí latin1 s nahrazením pro maximální kompatibilitu
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 # --- HLAVNÍ STRÁNKA ---
@@ -108,6 +124,9 @@ st.title("🏆 Organizátor pétanque")
 
 if st.session_state.kolo == 0:
     st.session_state.nazev_akce = st.text_input("Název turnaje:", st.session_state.nazev_akce)
+    # NOVÉ: Políčko pro datum
+    st.session_state.datum_akce = st.text_input("Datum turnaje (např. 15. 02. 2026):", st.session_state.datum_akce)
+    
     st.session_state.system = st.radio("Systém:", ["Švýcar", "Každý s každým"])
     v = st.text_area("Seznam hráčů (každý na nový řádek):")
     h_list = [i.strip() for i in v.split('\n') if i.strip()]
@@ -128,6 +147,8 @@ if st.session_state.kolo == 0:
             st.session_state.historie = []
             uloz_do_google()
             st.rerun()
+        else:
+            st.error("Zadejte alespoň 2 hráče!")
 
 elif st.session_state.kolo <= st.session_state.max_kol:
     st.header(f"🏟️ {st.session_state.kolo}. kolo / {st.session_state.max_kol}")
@@ -150,8 +171,6 @@ elif st.session_state.kolo <= st.session_state.max_kol:
     for i, (t1, t2) in enumerate(zapasy):
         with st.container():
             col1, col2, col3, col4 = st.columns([3, 1, 1, 3])
-            
-            # Detekce volného losu
             is_bye = (t1 == "VOLNÝ LOS" or t2 == "VOLNÝ LOS")
             
             with col1: st.markdown(f"**{t1}**")
