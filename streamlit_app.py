@@ -9,7 +9,7 @@ import json
 KLUB_NAZEV = "Club přátel pétanque HK"
 st.set_page_config(page_title=KLUB_NAZEV, layout="wide")
 
-# Propojení s Google Sheets (na pozadí)
+# Propojení s Google Sheets
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
@@ -21,7 +21,7 @@ def zobraz_logo():
     else:
         st.subheader(KLUB_NAZEV)
 
-# --- FUNKCE PRO CLOUD (tiché ukládání) ---
+# --- FUNKCE PRO CLOUD ---
 def uloz_do_google():
     try:
         data_k_ulozeni = {
@@ -145,10 +145,6 @@ elif st.session_state.kolo <= st.session_state.max_kol:
 
     if st.button("Uložit výsledky kola", type="primary"):
         for t1, t2, s1, s2 in vysledky_input:
-            idx1 = st.session_state.tymy[st.session_state.tymy["Tým"] == t1].index[0]
-            idx2 = st.session_state.tymy[st.session_state.tymy["Tonym"] == t2].index[0] if t2 in st.session_state.tymy["Tým"].values else st.session_state.tymy[st.session_state.tymy["Tým"] == t2].index[0]
-            
-            # Oprava indexování pro jistotu
             idx1 = st.session_state.tymy.index[st.session_state.tymy["Tým"] == t1][0]
             idx2 = st.session_state.tymy.index[st.session_state.tymy["Tým"] == t2][0]
 
@@ -171,12 +167,4 @@ else:
     res["Rozdíl"] = res["Skóre +"] - res["Skóre -"]
     res = res.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
     res.index += 1
-    st.table(res[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
-    
-    st.download_button("📥 Stáhnout PDF výsledky", vytvor_pdf_bytes(res.reset_index(), st.session_state.nazev_akce, "vysledky"), "vysledky.pdf", "application/pdf")
-    
-    if st.button("🗑️ Smazat turnaj a začít nový"):
-        df_empty = pd.DataFrame([{"stav_json": "{}"}])
-        conn.update(worksheet="Stav", data=df_empty)
-        st.session_state.clear()
-        st.rerun()
+    st.table(res[["Tým", "
