@@ -37,17 +37,13 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
     pdf.set_fill_color(230, 230, 230)
     
     if typ == "vysledky":
-        # Odstraníme VOLNÝ LOS z PDF exportu
         df_clean = df[df["Tým"] != "VOLNÝ LOS"].copy()
-        
         cols = ["Poz.", "Hráč/Tým", "V", "S+", "S-", "Diff"]
         widths = [15, 80, 20, 25, 25, 25]
         pdf.set_font(pismo, '', 10)
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, fill=True)
         pdf.ln()
-        
-        # V PDF vypíšeme pořadí od 1
         for i, (_, row) in enumerate(df_clean.iterrows(), start=1):
             pdf.cell(widths[0], 10, str(i), border=1)
             pdf.cell(widths[1], 10, str(row['Tým']), border=1)
@@ -197,11 +193,19 @@ else:
     for i, r in st.session_state.tymy.iterrows():
         st.session_state.tymy.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
     
-    # Filtrace a seřazení pro zobrazení
     res_display = st.session_state.tymy[st.session_state.tymy["Tým"] != "VOLNÝ LOS"].copy()
     res_display = res_display.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
-    res_display.index += 1  # Pro zobrazení v tabulce začneme od 1
+    res_display.index += 1
     
     st.table(res_display[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
     
-    col1
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button("📥 PDF Výsledky", vytvor_pdf_bytes(res_display, st.session_state.nazev_akce, "vysledky"), "vysledky.pdf", "application/pdf")
+    with col2:
+        h_df = pd.DataFrame(st.session_state.historie)
+        st.download_button("📥 PDF Historie", vytvor_pdf_bytes(h_df, st.session_state.nazev_akce, "historie"), "historie.pdf", "application/pdf")
+    
+    if st.button("Založit nový turnaj"):
+        st.session_state.clear()
+        st.rerun()
