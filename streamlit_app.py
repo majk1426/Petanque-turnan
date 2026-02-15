@@ -1,9 +1,8 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-import os
+import os, json
 from streamlit_gsheets import GSheetsConnection
-import json
 
 KLUB_NAZEV = "Club přátel pétanque HK"
 st.set_page_config(page_title=KLUB_NAZEV, layout="wide")
@@ -28,27 +27,30 @@ def nacti_z_google():
         if not df.empty and "stav_json" in df.columns:
             r = df.iloc[0]["stav_json"]
             if r and r != "{}" and not pd.isna(r):
-                d = json.loads(r)
-                st.session_state.update({"kolo": d["kolo"], "historie": d["historie"], "tymy": pd.DataFrame(d["tymy"]) if d["tymy"] else None, "system": d["system"], "nazev_akce": d["nazev_akce"], "max_kol": d["max_kol"]})
+                d = json.loads(r); st.session_state.update({"kolo": d["kolo"], "historie": d["historie"], "tymy": pd.DataFrame(d["tymy"]) if d["tymy"] else None, "system": d["system"], "nazev_akce": d["nazev_akce"], "max_kol": d["max_kol"]})
                 return True
     except: pass
     return False
 
-def vytvor_pdf(df, nazev):
+def vytvor_pdf(data, nazev, typ="v"):
     pdf = FPDF()
     pdf.add_page()
-    pismo = 'DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial'
-    if pismo == 'DejaVu': pdf.add_font('DejaVu', '', "DejaVuSans.ttf", uni=True)
-    pdf.set_font(pismo, '', 16); pdf.cell(0, 10, KLUB_NAZEV, ln=True)
-    pdf.set_font(pismo, '', 12); pdf.cell(0, 10, f"VÝSLEDKY: {nazev}", ln=True); pdf.ln(10)
-    pdf.set_font(pismo, '', 10)
-    for c in ["Poz.", "Tým", "V", "S+", "S-", "Diff"]: pdf.cell(20 if c!="Tým" else 75, 10, c, border=1)
-    pdf.ln()
-    for i, (_, row) in enumerate(df.iterrows(), 1):
-        if row['Tým'] != "VOLNÝ LOS":
-            pdf.cell(20, 10, str(i), border=1); pdf.cell(75, 10, str(row['Tým']), border=1)
-            for c in ['Výhry', 'Skóre +', 'Skóre -', 'Rozdíl']: pdf.cell(20, 10, str(row[c]), border=1)
+    p = 'DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial'
+    if p == 'DejaVu': pdf.add_font('DejaVu', '', "DejaVuSans.ttf", uni=True)
+    pdf.set_font(p, '', 16); pdf.cell(0, 10, KLUB_NAZEV, ln=True)
+    pdf.set_font(p, '', 12); pdf.cell(0, 10, f"{'VÝSLEDKY' if typ=='v' else 'HISTORIE'}: {nazev}", ln=True); pdf.ln(10); pdf.set_font(p, '', 10)
+    if typ == "v":
+        for c in ["Poz.", "Tým", "V", "S+", "S-", "Diff"]: pdf.cell(15 if c=="Poz." else 70 if c=="Tým" else 20, 10, c, border=1)
+        pdf.ln()
+        for i, r in enumerate(data.iterrows(), 1):
+            pdf.cell(15, 10, str(i), border=1); pdf.cell(70, 10, str(r[1]['Tým']), border=1); 
+            for c in ['Výhry', 'Skóre +', 'Skóre -', 'Rozdíl']: pdf.cell(20, 10, str(r[1][c]), border=1)
             pdf.ln()
+    else:
+        for c in ["Kolo", "Tým 1", "S1", "S2", "Tým 2"]: pdf.cell(15 if "S" in c or "K" in c else 65, 10, c, border=1)
+        pdf.ln()
+        for h in data:
+            pdf.cell(15, 10, str(h['Kolo']), border=1); pdf.cell(65, 10, str(h['Tým 1']), border=1); pdf.cell(15, 10, str(h['S1']), border=1); pdf.cell(15, 10, str(h['S2']), border=1); pdf.cell(65, 10, str(h['Tým 2']), border=1); pdf.ln()
     return pdf.output(dest='S').encode('latin-1', errors='replace')
 
 if 'kolo' not in st.session_state and not nacti_z_google():
@@ -60,12 +62,12 @@ if st.session_state.kolo == 0:
     st.session_state.nazev_akce = st.text_input("Název:", st.session_state.nazev_akce)
     st.session_state.system = st.radio("Systém:", ["Švýcar", "Každý s každým"])
     st.session_state.max_kol = st.number_input("Počet kol:", 1, 10, st.session_state.max_kol)
-    vstup = st.text_area("Hráči (každý na nový řádek):")
+    v = st.text_area("Hráči (každý na nový řádek):")
     if st.button("Zahájit turnaj", type="primary"):
-        hraci = [h.strip() for h in vstup.split('\n') if h.strip()]
-        if len(hraci) >= 2:
-            if len(hraci) % 2 != 0: hraci.append("VOLNÝ LOS")
-            st.session_state.tymy = pd.DataFrame([{"Tým": h, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for h in hraci])
+        h = [i.strip() for i in v.split('\n') if i.strip()]
+        if len(h) >= 2:
+            if len(h) % 2 != 0: h.append("VOLNÝ LOS")
+            st.session_state.tymy = pd.DataFrame([{"Tým": i, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for i in h])
             st.session_state.kolo = 1; uloz_do_google(); st.rerun()
 
 elif st.session_state.kolo <= st.session_state.max_kol:
@@ -73,26 +75,23 @@ elif st.session_state.kolo <= st.session_state.max_kol:
     df_t = st.session_state.tymy
     if st.session_state.system == "Švýcar":
         for i, r in df_t.iterrows():
-            souperi = [h["Tým 2"] if h["Tým 1"] == r["Tým"] else h["Tým 1"] for h in st.session_state.historie if r["Tým"] in (h["Tým 1"], h["Tým 2"])]
-            df_t.at[i, "Buchholz"] = sum([df_t[df_t["Tým"] == s].iloc[0]["Výhry"] for s in souperi if not df_t[df_t["Tým"] == s].empty])
+            sou = [h["Tým 2"] if h["Tým 1"] == r["Tým"] else h["Tým 1"] for h in st.session_state.historie if r["Tým"] in (h["Tým 1"], h["Tým 2"])]
+            df_t.at[i, "Buchholz"] = sum([df_t[df_t["Tým"] == s].iloc[0]["Výhry"] for s in sou if not df_t[df_t["Tým"] == s].empty])
             df_t.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
-        rozpis = df_t.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)["Tým"].tolist()
-        zapasy = [(rozpis[i], rozpis[i+1]) for i in range(0, len(rozpis), 2)]
+        roz = df_t.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)["Tým"].tolist()
+        zap = [(roz[i], roz[i+1]) for i in range(0, len(roz), 2)]
     else:
-        hraci = df_t["Tým"].tolist()
-        zapasy = [(hraci[i], hraci[len(hraci)-1-i]) for i in range(len(hraci)//2)]
-
-    vysl = []
-    for idx, (t1, t2) in enumerate(zapasy):
+        h = df_t["Tým"].tolist(); zap = [(h[i], h[len(h)-1-i]) for i in range(len(h)//2)]
+    res_in = []
+    for idx, (t1, t2) in enumerate(zap):
         with st.expander(f"Hřiště {idx+1}: {t1} vs {t2}", expanded=True):
             if "VOLNÝ LOS" in (t1, t2):
-                st.info("Volný los (13:0)"); vysl.append((t1, t2, 13 if t2 == "VOLNÝ LOS" else 0, 13 if t1 == "VOLNÝ LOS" else 0))
+                res_in.append((t1, t2, 13 if t2 == "VOLNÝ LOS" else 0, 13 if t1 == "VOLNÝ LOS" else 0))
             else:
                 c1, c2 = st.columns(2)
-                vysl.append((t1, t2, c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}"), c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")))
-
+                res_in.append((t1, t2, c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}"), c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")))
     if st.button("Uložit výsledky", type="primary"):
-        for t1, t2, s1, s2 in vysl:
+        for t1, t2, s1, s2 in res_in:
             i1, i2 = df_t.index[df_t["Tým"] == t1][0], df_t.index[df_t["Tým"] == t2][0]
             df_t.at[i1, "Skóre +"] += s1; df_t.at[i1, "Skóre -"] += s2
             df_t.at[i2, "Skóre +"] += s2; df_t.at[i2, "Skóre -"] += s1
@@ -100,26 +99,17 @@ elif st.session_state.kolo <= st.session_state.max_kol:
             elif s2 > s1: df_t.at[i2, "Výhry"] += 1
             st.session_state.historie.append({"Kolo": st.session_state.kolo, "Tým 1": t1, "Tým 2": t2, "S1": s1, "S2": s2})
         st.session_state.kolo += 1; uloz_do_google(); st.rerun()
-
 else:
     st.title("🏁 Konečné výsledky")
     res = st.session_state.tymy[st.session_state.tymy["Tým"] != "VOLNÝ LOS"].copy()
     res["Rozdíl"] = res["Skóre +"] - res["Skóre -"]
     res = res.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
-    res.index += 1
-    st.subheader("Tabulka")
-    st.table(res[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
-    
+    res.index += 1; st.table(res[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
     st.subheader("Historie zápasů")
-    hist_df = pd.DataFrame(st.session_state.historie)
-    st.dataframe(hist_df, use_container_width=True)
-    
+    st.dataframe(pd.DataFrame(st.session_state.historie), use_container_width=True)
     c1, c2 = st.columns(2)
-    pdf_data = vytvor_pdf(res.reset_index(), st.session_state.nazev_akce)
-    c1.download_button("📥 Stáhnout PDF výsledky", pdf_data, "vysledky.pdf", "application/pdf")
-    csv = hist_df.to_csv(index=False).encode('utf-8-sig')
-    c2.download_button("📥 Stáhnout historii (CSV)", csv, "historie.csv", "text/csv")
-    
+    c1.download_button("📥 PDF výsledky", vytvor_pdf(res.reset_index(), st.session_state.nazev_akce, "v"), "vysledky.pdf")
+    c2.download_button("📥 PDF historie", vytvor_pdf(st.session_state.historie, st.session_state.nazev_akce, "h"), "historie.pdf")
     if st.button("🗑️ Začít nový turnaj"):
         if conn: conn.update(worksheet="Stav", data=pd.DataFrame([{"stav_json": "{}"}]))
         st.session_state.clear(); st.rerun()
