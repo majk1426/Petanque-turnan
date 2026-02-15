@@ -19,8 +19,7 @@ def uloz_do_google():
     try:
         d = {"kolo": st.session_state.kolo, "historie": st.session_state.historie, "tymy": st.session_state.tymy.to_dict('records') if st.session_state.tymy is not None else None, "system": st.session_state.system, "nazev_akce": st.session_state.nazev_akce, "max_kol": st.session_state.max_kol}
         conn.update(worksheet="Stav", data=pd.DataFrame([{"stav_json": json.dumps(d)}]))
-    except:
-        pass
+    except: pass
 
 def nacti_z_google():
     if conn is None: return False
@@ -32,8 +31,7 @@ def nacti_z_google():
                 d = json.loads(r)
                 st.session_state.update({"kolo": d["kolo"], "historie": d["historie"], "tymy": pd.DataFrame(d["tymy"]) if d["tymy"] else None, "system": d["system"], "nazev_akce": d["nazev_akce"], "max_kol": d["max_kol"]})
                 return True
-    except:
-        pass
+    except: pass
     return False
 
 def vytvor_pdf(df, nazev):
@@ -41,18 +39,14 @@ def vytvor_pdf(df, nazev):
     pdf.add_page()
     pismo = 'DejaVu' if os.path.exists("DejaVuSans.ttf") else 'Arial'
     if pismo == 'DejaVu': pdf.add_font('DejaVu', '', "DejaVuSans.ttf", uni=True)
-    pdf.set_font(pismo, '', 16)
-    pdf.cell(0, 10, KLUB_NAZEV, ln=True)
-    pdf.set_font(pismo, '', 12)
-    pdf.cell(0, 10, f"VÝSLEDKY: {nazev}", ln=True)
-    pdf.ln(10)
+    pdf.set_font(pismo, '', 16); pdf.cell(0, 10, KLUB_NAZEV, ln=True)
+    pdf.set_font(pismo, '', 12); pdf.cell(0, 10, f"VÝSLEDKY: {nazev}", ln=True); pdf.ln(10)
     pdf.set_font(pismo, '', 10)
     for c in ["Poz.", "Tým", "V", "S+", "S-", "Diff"]: pdf.cell(20 if c!="Tým" else 75, 10, c, border=1)
     pdf.ln()
     for i, (_, row) in enumerate(df.iterrows(), 1):
         if row['Tým'] != "VOLNÝ LOS":
-            pdf.cell(20, 10, str(i), border=1)
-            pdf.cell(75, 10, str(row['Tým']), border=1)
+            pdf.cell(20, 10, str(i), border=1); pdf.cell(75, 10, str(row['Tým']), border=1)
             for c in ['Výhry', 'Skóre +', 'Skóre -', 'Rozdíl']: pdf.cell(20, 10, str(row[c]), border=1)
             pdf.ln()
     return pdf.output(dest='S').encode('latin-1', errors='replace')
@@ -72,9 +66,7 @@ if st.session_state.kolo == 0:
         if len(hraci) >= 2:
             if len(hraci) % 2 != 0: hraci.append("VOLNÝ LOS")
             st.session_state.tymy = pd.DataFrame([{"Tým": h, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for h in hraci])
-            st.session_state.kolo = 1
-            uloz_do_google()
-            st.rerun()
+            st.session_state.kolo = 1; uloz_do_google(); st.rerun()
 
 elif st.session_state.kolo <= st.session_state.max_kol:
     st.header(f"🏟️ {st.session_state.nazev_akce} | Kolo {st.session_state.kolo}")
@@ -94,11 +86,10 @@ elif st.session_state.kolo <= st.session_state.max_kol:
     for idx, (t1, t2) in enumerate(zapasy):
         with st.expander(f"Hřiště {idx+1}: {t1} vs {t2}", expanded=True):
             if "VOLNÝ LOS" in (t1, t2):
-                st.info("Volný los (automatická výhra 13:0)")
-                vysl.append((t1, t2, 13 if t2 == "VOLNÝ LOS" else 0, 13 if t1 == "VOLNÝ LOS" else 0))
+                st.info("Volný los (13:0)"); vysl.append((t1, t2, 13 if t2 == "VOLNÝ LOS" else 0, 13 if t1 == "VOLNÝ LOS" else 0))
             else:
                 c1, c2 = st.columns(2)
-                vysl.append((t1, t2, c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{idx}"), c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{idx}")))
+                vysl.append((t1, t2, c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}"), c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")))
 
     if st.button("Uložit výsledky", type="primary"):
         for t1, t2, s1, s2 in vysl:
@@ -108,9 +99,7 @@ elif st.session_state.kolo <= st.session_state.max_kol:
             if s1 > s2: df_t.at[i1, "Výhry"] += 1
             elif s2 > s1: df_t.at[i2, "Výhry"] += 1
             st.session_state.historie.append({"Kolo": st.session_state.kolo, "Tým 1": t1, "Tým 2": t2, "S1": s1, "S2": s2})
-        st.session_state.kolo += 1
-        uloz_do_google()
-        st.rerun()
+        st.session_state.kolo += 1; uloz_do_google(); st.rerun()
 
 else:
     st.title("🏁 Konečné výsledky")
@@ -118,9 +107,19 @@ else:
     res["Rozdíl"] = res["Skóre +"] - res["Skóre -"]
     res = res.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
     res.index += 1
+    st.subheader("Tabulka")
     st.table(res[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
-    st.download_button("📥 Stáhnout PDF", vytvor_pdf(res.reset_index(), st.session_state.nazev_akce), "vysledky.pdf", "application/pdf")
+    
+    st.subheader("Historie zápasů")
+    hist_df = pd.DataFrame(st.session_state.historie)
+    st.dataframe(hist_df, use_container_width=True)
+    
+    c1, c2 = st.columns(2)
+    pdf_data = vytvor_pdf(res.reset_index(), st.session_state.nazev_akce)
+    c1.download_button("📥 Stáhnout PDF výsledky", pdf_data, "vysledky.pdf", "application/pdf")
+    csv = hist_df.to_csv(index=False).encode('utf-8-sig')
+    c2.download_button("📥 Stáhnout historii (CSV)", csv, "historie.csv", "text/csv")
+    
     if st.button("🗑️ Začít nový turnaj"):
         if conn: conn.update(worksheet="Stav", data=pd.DataFrame([{"stav_json": "{}"}]))
-        st.session_state.clear()
-        st.rerun()
+        st.session_state.clear(); st.rerun()
