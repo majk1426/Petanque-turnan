@@ -62,7 +62,7 @@ def prepocitej_buchholz():
         nove_buchholzy.append(int(b_skore))
     st.session_state.tymy["Buchholz"] = nove_buchholzy
 
-# --- PDF EXPORT S ČEŠTINOU A HISTORIÍ ---
+# --- PDF EXPORT (OPRAVENÝ VÝSTUP) ---
 def export_pdf():
     pdf = FPDF()
     pdf.add_page()
@@ -100,7 +100,8 @@ def export_pdf():
             line = line.translate(str.maketrans("áéěíóúůýčďňřšťžÁÉĚÍÓÚŮÝČĎŇŘŠŤŽ", "aeeiouuycdnrstzAEEIOUUYCDNRSTZ"))
         pdf.cell(190, 6, line, ln=True)
         
-    return pdf.output(dest="S")
+    # Změna: převedení na bytes pomocí latin1 s nahrazením pro maximální kompatibilitu
+    return pdf.output(dest='S').encode('latin-1', 'replace')
 
 # --- HLAVNÍ STRÁNKA ---
 st.title("🏆 Organizátor pétanque")
@@ -127,8 +128,6 @@ if st.session_state.kolo == 0:
             st.session_state.historie = []
             uloz_do_google()
             st.rerun()
-        else:
-            st.error("Zadejte alespoň 2 hráče!")
 
 elif st.session_state.kolo <= st.session_state.max_kol:
     st.header(f"🏟️ {st.session_state.kolo}. kolo / {st.session_state.max_kol}")
@@ -151,10 +150,27 @@ elif st.session_state.kolo <= st.session_state.max_kol:
     for i, (t1, t2) in enumerate(zapasy):
         with st.container():
             col1, col2, col3, col4 = st.columns([3, 1, 1, 3])
+            
+            # Detekce volného losu
+            is_bye = (t1 == "VOLNÝ LOS" or t2 == "VOLNÝ LOS")
+            
             with col1: st.markdown(f"**{t1}**")
-            with col2: s1 = st.number_input(f"Body {t1}", 0, 13, 0, key=f"k{st.session_state.kolo}_s1_{i}")
-            with col3: s2 = st.number_input(f"Body {t2}", 0, 13, 0, key=f"k{st.session_state.kolo}_s2_{i}")
+            with col2: 
+                if is_bye:
+                    val1 = 13 if t2 == "VOLNÝ LOS" else 0
+                    st.write(f"**{val1}**")
+                    s1 = val1
+                else:
+                    s1 = st.number_input(f"Body {t1}", 0, 13, 0, key=f"k{st.session_state.kolo}_s1_{i}")
+            with col3: 
+                if is_bye:
+                    val2 = 13 if t1 == "VOLNÝ LOS" else 0
+                    st.write(f"**{val2}**")
+                    s2 = val2
+                else:
+                    s2 = st.number_input(f"Body {t2}", 0, 13, 0, key=f"k{st.session_state.kolo}_s2_{i}")
             with col4: st.markdown(f"**{t2}**")
+            
             aktualni_vysledky.append((t1, s1, t2, s2))
             st.divider()
 
@@ -178,8 +194,12 @@ else:
     df_f.index += 1
     st.table(df_f)
     
-    pdf_out = export_pdf()
-    st.download_button("📥 Stáhnout kompletní výsledky (PDF)", data=pdf_out, file_name="konecne_vysledky.pdf", mime="application/pdf")
+    # Export do PDF
+    try:
+        pdf_data = export_pdf()
+        st.download_button("📥 Stáhnout kompletní výsledky (PDF)", data=pdf_data, file_name="konecne_vysledky.pdf", mime="application/pdf")
+    except Exception as e:
+        st.error(f"Chyba při generování PDF: {e}")
     
     if st.button("Smazat vše a začít nový turnaj"):
         st.session_state.kolo = 0
