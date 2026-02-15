@@ -102,11 +102,44 @@ if 'kolo' not in st.session_state and not nacti_z_google():
 if st.session_state.kolo == 0:
     if os.path.exists("logo.jpg"): st.image("logo.jpg", width=150)
     st.title("🏆 Turnajový manažer")
-    st.session_state.nazev_akce = st.text_input("Název:", st.session_state.nazev_akce)
-    st.session_state.system = st.radio("Systém:", ["Švýcar", "Každý s každým"])
-    st.session_state.max_kol = st.number_input("Počet kol:", 1, 15, st.session_state.max_kol)
-    v = st.text_area("Hráči/Týmy (každý na nový řádek):")
-    if st.button("Zahájit turnaj", type="primary"):
+    # --- NOVÝ BLOK NASTAVENÍ ---
+st.session_state.nazev_akce = st.text_input("Název turnaje:", st.session_state.nazev_akce)
+st.session_state.system = st.radio("Zvolte systém:", ["Švýcar", "Každý s každým"])
+
+# Seznam hráčů potřebujeme znát hned pro výpočet kol
+v = st.text_area("Seznam hráčů/týmů (každý na nový řádek):")
+h_list = [i.strip() for i in v.split('\n') if i.strip()]
+n_hracu = len(h_list)
+# Dynamická logika pro počet kol
+if st.session_state.system == "Každý s každým":
+    if n_hracu > 1:
+        # Výpočet pro pétanque: sudý počet (n-1), lichý počet (n)
+        vypocet_kol = n_hracu - 1 if n_hracu % 2 == 0 else n_hracu
+        st.session_state.max_kol = vypocet_kol
+        st.info(f"🔢 Systém 'Každý s každým' vyžaduje **{vypocet_kol} kol** pro {n_hracu} účastníků.")
+        # Zobrazení zamknutého políčka
+        st.number_input("Počet kol:", value=vypocet_kol, disabled=True)
+    else:
+        st.warning("Zadejte jména hráčů, abych mohl spočítat počet kol.")
+else:
+    # Pro Švýcara necháme pole volně k úpravě
+    st.session_state.max_kol = st.number_input("Počet kol (nastavte ručně):", 1, 15, st.session_state.max_kol)
+
+if st.button("Zahájit a uložit do cloudu", type="primary"):
+    if n_hracu >= 2:
+        h = h_list.copy()
+        # Přidání volného losu při lichém počtu
+        if len(h) % 2 != 0: h.append("VOLNÝ LOS")
+        
+        # Inicializace tabulky týmů
+        tymy_data = [{"Hráč/Tým": i, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for i in h]
+        st.session_state.tymy = pd.DataFrame(tymy_data)
+        st.session_state.kolo = 1
+        st.session_state.historie = []
+        uloz_do_google()
+        st.rerun()
+    else:
+        st.error("Musíte zadat alespoň 2 hráče!")
         h = [i.strip() for i in v.split('\n') if i.strip()]
         if len(h) >= 2:
             if len(h) % 2 != 0: h.append("VOLNÝ LOS")
