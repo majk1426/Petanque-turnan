@@ -36,12 +36,12 @@ def nacti_z_google():
 if "kolo" not in st.session_state:
     data = nacti_z_google()
     if data:
-        st.session_state.nazev_akce = data["nazev_akce"]
-        st.session_state.kolo = data["kolo"]
-        st.session_state.max_kol = data["max_kol"]
-        st.session_state.system = data["system"]
+        st.session_state.nazev_akce = data.get("nazev_akce", "Pétanque Turnaj")
+        st.session_state.kolo = data.get("kolo", 0)
+        st.session_state.max_kol = data.get("max_kol", 3)
+        st.session_state.system = data.get("system", "Švýcar")
         st.session_state.tymy = pd.DataFrame(data["tymy"])
-        st.session_state.historie = data["historie"]
+        st.session_state.historie = data.get("historie", [])
     else:
         st.session_state.nazev_akce = "Pétanque Turnaj"
         st.session_state.kolo = 0
@@ -62,54 +62,59 @@ def prepocitej_buchholz():
         nove_buchholzy.append(b_skore)
     st.session_state.tymy["Buchholz"] = nove_buchholzy
 
-# --- OPRAVENÝ PDF EXPORT (TABULKA + HISTORIE) ---
+# --- PDF EXPORT S ČEŠTINOU A HISTORIÍ ---
 def export_pdf():
     pdf = FPDF()
     pdf.add_page()
-    # Kvůli českým znakům v latin-1 používáme náhrady, pro plnou češtinu by byl třeba .ttf font
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, f"Vysledky: {st.session_state.nazev_akce}", ln=True, align="C")
     
-    # Konečné pořadí
-    pdf.set_font("Arial", "B", 12)
+    # Načtení fontu pro češtinu
+    font_path = "DejaVuSans.ttf"
+    if os.path.exists(font_path):
+        pdf.add_font("DejaVu", "", font_path, uni=True)
+        pdf.set_font("DejaVu", "", 14)
+    else:
+        pdf.set_font("Arial", "B", 14)
+
+    pdf.cell(190, 10, f"Výsledky: {st.session_state.nazev_akce}", ln=True, align="C")
     pdf.ln(5)
-    pdf.cell(190, 10, "Konecne poradi:", ln=True)
-    pdf.set_font("Arial", "", 10)
+    
+    # Tabulka pořadí
+    pdf.cell(190, 10, "Konečné pořadí:", ln=True)
+    pdf.set_font("DejaVu" if os.path.exists(font_path) else "Arial", "", 10)
     
     df_v = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
     for i, (_, r) in enumerate(df_v.iterrows(), 1):
-        line = f"{i}. {r['Hráč/Tým']} - Vyhry: {r['Výhry']}, Buchholz: {r['Buchholz']}, Rozdil: {r['Skóre +']-r['Skóre -']}"
-        pdf.cell(190, 7, line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
+        rozdil = r['Skóre +'] - r['Skóre -']
+        line = f"{i}. {r['Hráč/Tým']} | Výhry: {r['Výhry']} | Buchholz: {r['Buchholz']} | Rozdíl: {rozdil}"
+        pdf.cell(190, 7, line, ln=True)
     
     # Historie zápasů
     pdf.ln(10)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(190, 10, "Prehled zapasu (historie):", ln=True)
-    pdf.set_font("Arial", "", 9)
-    
+    pdf.cell(190, 10, "Přehled všech zápasů:", ln=True)
     for h in st.session_state.historie:
         line = f"Kolo {h['Kolo']}: {h['Hráč/Tým 1']} {h['S1']} : {h['S2']} {h['Hráč/Tým 2']}"
-        pdf.cell(190, 6, line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
+        pdf.cell(190, 6, line, ln=True)
         
-    return pdf.output(dest="S").encode("latin-1", errors="replace")
+    return pdf.output(dest="S").encode("latin-1") if not os.path.exists(font_path) else pdf.output(dest="S")
 
-# --- HLAVNÍ LOGIKA ---
+# --- HLAVNÍ STRÁNKA ---
 st.title("🏆 Organizátor pétanque")
 
 if st.session_state.kolo == 0:
     st.session_state.nazev_akce = st.text_input("Název turnaje:", st.session_state.nazev_akce)
     st.session_state.system = st.radio("Systém:", ["Švýcar", "Každý s každým"])
-    v = st.text_area("Hráči (každý na nový řádek):")
+    
+    v = st.text_area("Seznam hráčů (každý na nový řádek):")
     h_list = [i.strip() for i in v.split('\n') if i.strip()]
     
     if st.session_state.system == "Každý s každým":
         vypocet_kol = len(h_list) - 1 if len(h_list) % 2 == 0 else len(h_list)
         st.session_state.max_kol = vypocet_kol
-        st.info(f"Počet kol nastaven automaticky na: {vypocet_kol}")
+        st.info(f"Počet kol pro 'Každý s každým' nastaven na: {vypocet_kol}")
     else:
         st.session_state.max_kol = st.number_input("Počet kol:", 1, 15, 3)
 
-    if st.button("Zahájit turnaj"):
+    if st.button("Zahájit turnaj", type="primary"):
         if len(h_list) >= 2:
             h = h_list.copy()
             if len(h) % 2 != 0: h.append("VOLNÝ LOS")
@@ -120,14 +125,15 @@ if st.session_state.kolo == 0:
             st.rerun()
 
 elif st.session_state.kolo <= st.session_state.max_kol:
-    st.subheader(f"🏟️ {st.session_state.kolo}. kolo z {st.session_state.max_kol}")
+    st.header(f"🏟️ {st.session_state.kolo}. kolo / {st.session_state.max_kol}")
     
-    # Generování zápasů
+    # Výběr dvojic
     df_t = st.session_state.tymy
     if st.session_state.system == "Švýcar":
         df_s = df_t.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
         h = df_s["Hráč/Tým"].tolist()
     else:
+        # Algoritmus rotace pro Každý s každým
         h_orig = df_t["Hráč/Tým"].tolist()
         n = len(h_orig)
         s = (st.session_state.kolo - 1) % (n - 1)
@@ -138,18 +144,19 @@ elif st.session_state.kolo <= st.session_state.max_kol:
     zapasy = [(h[i], h[len(h)-1-i]) for i in range(len(h)//2)]
     
     aktualni_vysledky = []
+    st.write("### Zadejte výsledky:")
     for i, (t1, t2) in enumerate(zapasy):
-        c1, c2, c3, c4 = st.columns([3,1,1,3])
-        with c1: st.write(t1)
-        # KLÍČOVÁ OPRAVA: key obsahuje číslo kola, takže se po uložení widgety resetují
-        with c2: s1 = st.number_input("S1", 0, 13, 0, key=f"k{st.session_state.kolo}_s1_{i}")
-        with c3: s2 = st.number_input("S2", 0, 13, 0, key=f"k{st.session_state.kolo}_s2_{i}")
-        with c4: st.write(t2)
-        aktualni_vysledky.append((t1, s1, t2, s2))
+        with st.container():
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 3])
+            with col1: st.markdown(f"**{t1}**")
+            with col2: s1 = st.number_input(f"Body {t1}", 0, 13, 0, key=f"k{st.session_state.kolo}_s1_{i}", label_visibility="collapsed")
+            with col3: s2 = st.number_input(f"Body {t2}", 0, 13, 0, key=f"k{st.session_state.kolo}_s2_{i}", label_visibility="collapsed")
+            with col4: st.markdown(f"**{t2}**")
+            aktualni_vysledky.append((t1, s1, t2, s2))
+            st.divider()
 
-    if st.button("Uložit výsledky kola"):
+    if st.button("Uložit kolo a pokračovat", type="primary"):
         for t1, s1, t2, s2 in aktualni_vysledky:
-            # Update statistik
             for t, s_plus, s_minus in [(t1, s1, s2), (t2, s2, s1)]:
                 idx = st.session_state.tymy[st.session_state.tymy["Hráč/Tým"] == t].index[0]
                 st.session_state.tymy.at[idx, "Skóre +"] += s_plus
@@ -168,9 +175,10 @@ else:
     df_f.index += 1
     st.table(df_f)
     
-    st.download_button("📥 Stáhnout PDF s historií", data=export_pdf(), file_name="konecne_vysledky.pdf")
+    pdf_data = export_pdf()
+    st.download_button("📥 Stáhnout kompletní výsledky (PDF)", data=pdf_data, file_name="konecne_vysledky.pdf", mime="application/pdf")
     
-    if st.button("Restartovat turnaj"):
+    if st.button("Smazat vše a začít nový turnaj"):
         st.session_state.kolo = 0
         uloz_do_google()
         st.rerun()
