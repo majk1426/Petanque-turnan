@@ -144,4 +144,36 @@ elif st.session_state.kolo <= st.session_state.max_kol:
             df_t.at[i1, "Skóre +"] += s1; df_t.at[i1, "Skóre -"] += s2
             df_t.at[i2, "Skóre +"] += s2; df_t.at[i2, "Skóre -"] += s1
             if s1 > s2: df_t.at[i1, "Výhry"] += 1
-            elif
+            elif s2 > s1: df_t.at[i2, "Výhry"] += 1
+            st.session_state.historie.append({"Kolo": st.session_state.kolo, "Hráč/Tým 1": t1, "Hráč/Tým 2": t2, "S1": s1, "S2": s2})
+        st.session_state.kolo += 1; uloz_do_google(); st.rerun()
+
+else:
+    st.balloons()
+    st.title("🏁 Konečné výsledky")
+    res = st.session_state.tymy[st.session_state.tymy["Hráč/Tým"] != "VOLNÝ LOS"].copy()
+    res["Rozdíl"] = res["Skóre +"] - res["Skóre -"]
+    res = res.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
+    res.index += 1
+    
+    st.table(res[["Hráč/Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
+    
+    st.subheader("📊 Historie kol")
+    for k in range(1, st.session_state.kolo):
+        with st.expander(f"Kolo {k}", expanded=False):
+            kol_zápasy = [h for h in st.session_state.historie if h["Kolo"] == k]
+            for z in kol_zápasy:
+                if z["S1"] > z["S2"]:
+                    st.success(f"**{z['Hráč/Tým 1']}** {z['S1']} : {z['S2']} {z['Hráč/Tým 2']}")
+                elif z["S2"] > z["S1"]:
+                    st.success(f"{z['Hráč/Tým 1']} {z['S1']} : {z['S2']} **{z['Hráč/Tým 2']}**")
+                else:
+                    st.info(f"{z['Hráč/Tým 1']} {z['S1']} : {z['S2']} {z['Hráč/Tým 2']}")
+
+    c1, c2 = st.columns(2)
+    c1.download_button("📥 PDF výsledky", vytvor_pdf(res, st.session_state.nazev_akce, "v"), "vysledky.pdf")
+    c2.download_button("📥 PDF historie", vytvor_pdf(st.session_state.historie, st.session_state.nazev_akce, "h"), "historie.pdf")
+    
+    if st.button("🗑️ Začít nový turnaj"):
+        if conn: conn.update(worksheet="Stav", data=pd.DataFrame([{"stav_json": "{}"}]))
+        st.session_state.clear(); st.rerun()
