@@ -65,18 +65,16 @@ def prepocitej_buchholz():
         nove_buchholzy.append(int(b_skore))
     st.session_state.tymy["Buchholz"] = nove_buchholzy
 
-# --- PDF EXPORT (LOGO + DATUM + ČEŠTINA + HISTORIE) ---
+# --- PDF EXPORT (FILTROVANÝ BEZ VOLNÉHO LOSU) ---
 def export_pdf():
     pdf = FPDF()
     pdf.add_page()
     font_path = "DejaVuSans.ttf"
     logo_path = "logo.jpg"
     
-    # 1. LOGO
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=10, y=8, w=30)
     
-    # 2. FONT
     if os.path.exists(font_path):
         pdf.add_font("DejaVu", "", font_path, uni=True)
         pdf.set_font("DejaVu", "", 16)
@@ -85,7 +83,6 @@ def export_pdf():
         pdf.set_font("Arial", "B", 16)
         use_font = "Arial"
 
-    # 3. HLAVIČKA
     pdf.set_y(15)
     pdf.cell(190, 10, f"{st.session_state.nazev_akce}", ln=True, align="C")
     pdf.set_font(use_font, "", 11)
@@ -93,12 +90,13 @@ def export_pdf():
         pdf.cell(190, 8, f"Datum: {st.session_state.datum_akce}", ln=True, align="C")
     pdf.ln(10)
     
-    # 4. TABULKA POŘADÍ
     pdf.set_font(use_font, "", 12)
     pdf.cell(190, 10, "Konečné pořadí:", ln=True)
     pdf.set_font(use_font, "", 10)
     
-    df_v = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
+    # FILTR: Odstranění Volného losu z PDF
+    df_v = st.session_state.tymy[st.session_state.tymy["Hráč/Tým"] != "VOLNÝ LOS"].sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
+    
     for i, (_, r) in enumerate(df_v.iterrows(), 1):
         rozdil = int(r['Skóre +'] - r['Skóre -'])
         line = f"{i}. {r['Hráč/Tým']} | Výhry: {int(r['Výhry'])} | Buchholz: {int(r['Buchholz'])} | Rozdíl: {rozdil}"
@@ -106,7 +104,6 @@ def export_pdf():
             line = line.translate(str.maketrans("áéěíóúůýčďňřšťžÁÉĚÍÓÚŮÝČĎŇŘŠŤŽ", "aeeiouuycdnrstzAEEIOUUYCDNRSTZ"))
         pdf.cell(190, 7, line, ln=True)
     
-    # 5. HISTORIE ZÁPASŮ
     pdf.ln(10)
     pdf.set_font(use_font, "", 12)
     pdf.cell(190, 10, "Přehled všech zápasů:", ln=True)
@@ -124,9 +121,7 @@ st.title("🏆 Organizátor pétanque")
 
 if st.session_state.kolo == 0:
     st.session_state.nazev_akce = st.text_input("Název turnaje:", st.session_state.nazev_akce)
-    # NOVÉ: Políčko pro datum
     st.session_state.datum_akce = st.text_input("Datum turnaje (např. 15. 02. 2026):", st.session_state.datum_akce)
-    
     st.session_state.system = st.radio("Systém:", ["Švýcar", "Každý s každým"])
     v = st.text_area("Seznam hráčů (každý na nový řádek):")
     h_list = [i.strip() for i in v.split('\n') if i.strip()]
@@ -209,11 +204,11 @@ elif st.session_state.kolo <= st.session_state.max_kol:
 
 else:
     st.header("🏁 Turnaj ukončen")
-    df_f = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
+    # FILTR: Odstranění Volného losu z výsledné tabulky
+    df_f = st.session_state.tymy[st.session_state.tymy["Hráč/Tým"] != "VOLNÝ LOS"].sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
     df_f.index += 1
     st.table(df_f)
     
-    # Export do PDF
     try:
         pdf_data = export_pdf()
         st.download_button("📥 Stáhnout kompletní výsledky (PDF)", data=pdf_data, file_name="konecne_vysledky.pdf", mime="application/pdf")
