@@ -39,9 +39,6 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
     if typ == "vysledky":
         # Odstraníme VOLNÝ LOS z PDF exportu
         df_clean = df[df["Tým"] != "VOLNÝ LOS"].copy()
-        # Resetujeme index tak, aby začínal od 1 pro sloupec "Poz."
-        df_clean.reset_index(drop=True, inplace=True)
-        df_clean.index += 1
         
         cols = ["Poz.", "Hráč/Tým", "V", "S+", "S-", "Diff"]
         widths = [15, 80, 20, 25, 25, 25]
@@ -49,7 +46,9 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, fill=True)
         pdf.ln()
-        for i, row in df_clean.iterrows():
+        
+        # V PDF vypíšeme pořadí od 1
+        for i, (_, row) in enumerate(df_clean.iterrows(), start=1):
             pdf.cell(widths[0], 10, str(i), border=1)
             pdf.cell(widths[1], 10, str(row['Tým']), border=1)
             pdf.cell(widths[2], 10, str(row['Výhry']), border=1)
@@ -164,4 +163,45 @@ elif st.session_state.kolo <= st.session_state.max_kol:
             idx2 = st.session_state.tymy[st.session_state.tymy["Tým"] == t2].index[0]
             st.session_state.tymy.at[idx1, "Skóre +"] += s1
             st.session_state.tymy.at[idx1, "Skóre -"] += s2
-            st.session_state.t
+            st.session_state.tymy.at[idx2, "Skóre +"] += s2
+            st.session_state.tymy.at[idx2, "Skóre -"] += s1
+            if s1 > s2: st.session_state.tymy.at[idx1, "Výhry"] += 1
+            elif s2 > s1: st.session_state.tymy.at[idx2, "Výhry"] += 1
+            st.session_state.historie.append({"Kolo": st.session_state.kolo, "Tým 1": t1, "Tým 2": t2, "S1": s1, "S2": s2})
+        st.session_state.kolo += 1
+        st.rerun()
+
+    if st.session_state.kolo > 1:
+        if col_undo.button("⬅️ Smazat poslední kolo (Oprava)"):
+            naposledy = st.session_state.kolo - 1
+            zápasy_k_mazání = [h for h in st.session_state.historie if h["Kolo"] == naposledy]
+            for h in zápasy_k_mazání:
+                idx1 = st.session_state.tymy[st.session_state.tymy["Tým"] == h["Tým 1"]].index[0]
+                idx2 = st.session_state.tymy[st.session_state.tymy["Tým"] == h["Tým 2"]].index[0]
+                st.session_state.tymy.at[idx1, "Skóre +"] -= h["S1"]
+                st.session_state.tymy.at[idx1, "Skóre -"] -= h["S2"]
+                st.session_state.tymy.at[idx2, "Skóre +"] -= h["S2"]
+                st.session_state.tymy.at[idx2, "Skóre -"] -= h["S1"]
+                if h["S1"] > h["S2"]: st.session_state.tymy.at[idx1, "Výhry"] -= 1
+                elif h["S2"] > h["S1"]: st.session_state.tymy.at[idx2, "Výhry"] -= 1
+            st.session_state.historie = [h for h in st.session_state.historie if h["Kolo"] != naposledy]
+            st.session_state.kolo = naposledy
+            st.rerun()
+
+# --- 3. KONEC ---
+else:
+    zobraz_logo()
+    st.balloons()
+    st.title("🏁 Konečné výsledky")
+    
+    for i, r in st.session_state.tymy.iterrows():
+        st.session_state.tymy.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
+    
+    # Filtrace a seřazení pro zobrazení
+    res_display = st.session_state.tymy[st.session_state.tymy["Tým"] != "VOLNÝ LOS"].copy()
+    res_display = res_display.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
+    res_display.index += 1  # Pro zobrazení v tabulce začneme od 1
+    
+    st.table(res_display[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
+    
+    col1
