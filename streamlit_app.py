@@ -35,7 +35,7 @@ def uloz_do_google():
         df_save = pd.DataFrame([{"stav_json": json.dumps(data_k_ulozeni)}])
         conn.update(worksheet="Stav", data=df_save)
     except:
-        pass # Ukládá se tiše, neobtěžujeme uživatele chybou pokud vypadne net
+        pass 
 
 def nacti_z_google():
     try:
@@ -114,7 +114,6 @@ elif st.session_state.kolo <= st.session_state.max_kol:
     zobraz_logo()
     st.header(f"🏟️ {st.session_state.nazev_akce} | Kolo {st.session_state.kolo}/{st.session_state.max_kol}")
     
-    # Švýcarský systém: Seřazení a párování
     if st.session_state.system == "Švýcar":
         for i, r in st.session_state.tymy.iterrows():
             souperi = [h["Tým 2"] if h["Tým 1"] == r["Tým"] else h["Tým 1"] for h in st.session_state.historie if h["Tým 1"] == r["Tým"] or h["Tým 2"] == r["Tým"]]
@@ -123,27 +122,4 @@ elif st.session_state.kolo <= st.session_state.max_kol:
                 s_data = st.session_state.tymy[st.session_state.tymy["Tým"] == s]
                 if not s_data.empty: bhz += s_data.iloc[0]["Výhry"]
             st.session_state.tymy.at[i, "Buchholz"] = bhz
-            st.session_state.tymy.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
-        
-        df_serazene = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
-        serazene_list = df_serazene["Tým"].tolist()
-        aktualni_rozpis = [(serazene_list[i], serazene_list[i+1]) for i in range(0, len(serazene_list), 2)]
-    else:
-        # Každý s každým (Round Robin zjednodušeně pro aktuální kolo)
-        hraci = st.session_state.tymy["Tým"].tolist()
-        aktualni_rozpis = [(hraci[i], hraci[len(hraci)-1-i]) for i in range(len(hraci)//2)]
-
-    vysledky_input = []
-    for idx, (t1, t2) in enumerate(aktualni_rozpis):
-        with st.expander(f"Hřiště {idx+1}: {t1} vs {t2}", expanded=True):
-            if "VOLNÝ LOS" in [t1, t2]:
-                st.info("Volný los (13:0)")
-                vysledky_input.append((t1, t2, (13 if t2=="VOLNÝ LOS" else 0), (13 if t1=="VOLNÝ LOS" else 0)))
-            else:
-                c1, c2 = st.columns(2)
-                # TADY JSOU TY CHYBĚJÍCÍ KOLONKY:
-                s1 = c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}")
-                s2 = c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")
-                vysledky_input.append((t1, t2, s1, s2))
-
-    if st.
+            st.session_state.tymy.at[i, "Rozdíl"] = r["Skó
