@@ -139,4 +139,44 @@ elif st.session_state.kolo <= st.session_state.max_kol:
                 vysledky_input.append((t1, t2, (13 if t2=="VOLNÝ LOS" else 0), (13 if t1=="VOLNÝ LOS" else 0)))
             else:
                 c1, c2 = st.columns(2)
-                s1 = c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1
+                s1 = c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}")
+                s2 = c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")
+                vysledky_input.append((t1, t2, s1, s2))
+
+    if st.button("Uložit výsledky kola", type="primary"):
+        for t1, t2, s1, s2 in vysledky_input:
+            idx1 = st.session_state.tymy[st.session_state.tymy["Tým"] == t1].index[0]
+            idx2 = st.session_state.tymy[st.session_state.tymy["Tonym"] == t2].index[0] if t2 in st.session_state.tymy["Tým"].values else st.session_state.tymy[st.session_state.tymy["Tým"] == t2].index[0]
+            
+            # Oprava indexování pro jistotu
+            idx1 = st.session_state.tymy.index[st.session_state.tymy["Tým"] == t1][0]
+            idx2 = st.session_state.tymy.index[st.session_state.tymy["Tým"] == t2][0]
+
+            st.session_state.tymy.at[idx1, "Skóre +"] += s1
+            st.session_state.tymy.at[idx1, "Skóre -"] += s2
+            st.session_state.tymy.at[idx2, "Skóre +"] += s2
+            st.session_state.tymy.at[idx2, "Skóre -"] += s1
+            if s1 > s2: st.session_state.tymy.at[idx1, "Výhry"] += 1
+            elif s2 > s1: st.session_state.tymy.at[idx2, "Výhry"] += 1
+            st.session_state.historie.append({"Kolo": st.session_state.kolo, "Tým 1": t1, "Tým 2": t2, "S1": s1, "S2": s2})
+        st.session_state.kolo += 1
+        uloz_do_google()
+        st.rerun()
+
+# --- 3. KONEC ---
+else:
+    zobraz_logo()
+    st.title("🏁 Konečné výsledky")
+    res = st.session_state.tymy[st.session_state.tymy["Tým"] != "VOLNÝ LOS"].copy()
+    res["Rozdíl"] = res["Skóre +"] - res["Skóre -"]
+    res = res.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
+    res.index += 1
+    st.table(res[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
+    
+    st.download_button("📥 Stáhnout PDF výsledky", vytvor_pdf_bytes(res.reset_index(), st.session_state.nazev_akce, "vysledky"), "vysledky.pdf", "application/pdf")
+    
+    if st.button("🗑️ Smazat turnaj a začít nový"):
+        df_empty = pd.DataFrame([{"stav_json": "{}"}])
+        conn.update(worksheet="Stav", data=df_empty)
+        st.session_state.clear()
+        st.rerun()
