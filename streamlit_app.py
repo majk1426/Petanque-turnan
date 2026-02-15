@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 import os
-import io
 
 # --- KONFIGURACE ---
 KLUB_NAZEV = "Club přátel pétanque HK"
@@ -40,6 +39,7 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
     if typ == "vysledky":
         cols = ["Poz.", "Hráč/Tým", "V", "S+", "S-", "Diff"]
         widths = [15, 80, 20, 25, 25, 25]
+        pdf.set_font(pismo, '', 10)
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, fill=True)
         pdf.ln()
@@ -54,6 +54,7 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
     else:
         cols = ["Kolo", "Hráč 1", "Hráč 2", "S1", "S2"]
         widths = [15, 70, 70, 15, 15]
+        pdf.set_font(pismo, '', 10)
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, fill=True)
         pdf.ln()
@@ -65,15 +66,17 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
             pdf.cell(widths[4], 10, str(row['S2']), border=1)
             pdf.ln()
 
+    # Důležitá změna pro Streamlit: vracíme string v latin-1 kódování pro download button
     return pdf.output(dest='S').encode('latin-1', errors='replace')
 
-# --- LOGIKA ROUND ROBIN (KAŽDÝ S KAŽDÝM) ---
+# --- LOGIKA ROUND ROBIN ---
 def generuj_round_robin(tymy):
-    if len(tymy) % 2 != 0:
-        tymy.append("VOLNÝ LOS")
-    n = len(tymy)
+    temp_tymy = tymy[:]
+    if len(temp_tymy) % 2 != 0:
+        temp_tymy.append("VOLNÝ LOS")
+    n = len(temp_tymy)
     kola = []
-    pro_rotaci = tymy[:]
+    pro_rotaci = temp_tymy[:]
     for i in range(n - 1):
         zápasy_kola = []
         for j in range(n // 2):
@@ -84,7 +87,12 @@ def generuj_round_robin(tymy):
 
 def vypocti_buchholz(jmeno, df, historie):
     souperi = [h["Tým 2"] if h["Tým 1"] == jmeno else h["Tým 1"] for h in historie if h["Tým 1"] == jmeno or h["Tým 2"] == jmeno]
-    return sum(df[df["Tým"] == s]["Výhry"].iloc[0] for s in souperi if not df[df["Tým"] == s].empty)
+    bhz = 0
+    for s in souperi:
+        shoda = df[df["Tým"] == s]
+        if not shoda.empty:
+            bhz += shoda.iloc[0]["Výhry"]
+    return bhz
 
 # --- STAV APLIKACE ---
 if 'kolo' not in st.session_state:
@@ -104,10 +112,12 @@ if st.session_state.kolo == 0:
     if st.button("Zahájit turnaj", type="primary"):
         hraci = [h.strip() for h in vstup.split('\n') if h.strip()]
         if len(hraci) >= 2:
-            if len(hraci) % 2 != 0: hraci.append("VOLNÝ LOS")
-            st.session_state.tymy = pd.DataFrame([{"Tým": h, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for h in hraci])
+            tymy_list = hraci[:]
+            if len(tymy_list) % 2 != 0: 
+                tymy_list.append("VOLNÝ LOS")
+            st.session_state.tymy = pd.DataFrame([{"Tým": h, "Výhry": 0, "Skóre +": 0, "Skóre -": 0, "Rozdíl": 0, "Buchholz": 0} for h in tymy_list])
             if st.session_state.system == "Každý s každým":
-                st.session_state.vsechna_kola = generuj_round_robin(hraci)
+                st.session_state.vsechna_kola = generuj_round_robin(tymy_list)
                 st.session_state.max_kol = len(st.session_state.vsechna_kola)
             st.session_state.kolo = 1
             st.rerun()
@@ -122,35 +132,62 @@ elif st.session_state.kolo <= st.session_state.max_kol:
         for i, r in st.session_state.tymy.iterrows():
             st.session_state.tymy.at[i, "Buchholz"] = vypocti_buchholz(r["Tým"], st.session_state.tymy, st.session_state.historie)
             st.session_state.tymy.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
-        serazeni = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)["Tým"].tolist()
-        aktualni_rozpis = [(serazene[i], serazene[i+1]) for i in range(0, len(serazene), 2)]
+        
+        # OPRAVA: Název proměnné sjednocen na serazene_tymy
+        df_serazene = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
+        serazene_tymy = df_serazene["Tým"].tolist()
+        aktualni_rozpis = [(serazene_tymy[i], serazene_tymy[i+1]) for i in range(0, len(serazene_tymy), 2)]
     else:
         aktualni_rozpis = st.session_state.vsechna_kola[st.session_state.kolo - 1]
 
-    vysledky = []
+    vysledky_input = []
     for idx, (t1, t2) in enumerate(aktualni_rozpis):
         hriste = f"Hřiště {idx+1}" if idx < 5 else "Čeká na volné hřiště"
         with st.expander(f"{hriste}: {t1} vs {t2}", expanded=True):
             if "VOLNÝ LOS" in [t1, t2]:
                 v = t1 if t2 == "VOLNÝ LOS" else t2
                 st.info(f"⚪ {v} má volno (13:0)")
-                vysledky.append((t1, t2, (13 if t2 == "VOLNÝ LOS" else 0), (13 if t1 == "VOLNÝ LOS" else 0)))
+                vysledky_input.append((t1, t2, (13 if t2 == "VOLNÝ LOS" else 0), (13 if t1 == "VOLNÝ LOS" else 0)))
             else:
                 c1, c2 = st.columns(2)
                 s1 = c1.number_input(f"{t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}")
                 s2 = c2.number_input(f"{t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")
-                vysledky.append((t1, t2, s1, s2))
+                vysledky_input.append((t1, t2, s1, s2))
 
-    if st.button("Uložit kolo", type="primary"):
-        for t1, t2, s1, s2 in vysledky:
-            for t, s, o in [(t1, s1, s2), (t2, s2, s1)]:
-                idx = st.session_state.tymy[st.session_state.tymy["Tým"] == t].index[0]
-                st.session_state.tymy.at[idx, "Skóre +"] += s
-                st.session_state.tymy.at[idx, "Skóre -"] += o
-                if s > o: st.session_state.tymy.at[idx, "Výhry"] += 1
+    col_save, col_undo = st.columns(2)
+    if col_save.button("Uložit kolo", type="primary"):
+        for t1, t2, s1, s2 in vysledky_input:
+            idx1 = st.session_state.tymy[st.session_state.tymy["Tým"] == t1].index[0]
+            idx2 = st.session_state.tymy[st.session_state.tymy["Tým"] == t2].index[0]
+            
+            st.session_state.tymy.at[idx1, "Skóre +"] += s1
+            st.session_state.tymy.at[idx1, "Skóre -"] += s2
+            st.session_state.tymy.at[idx2, "Skóre +"] += s2
+            st.session_state.tymy.at[idx2, "Skóre -"] += s1
+            
+            if s1 > s2: st.session_state.tymy.at[idx1, "Výhry"] += 1
+            elif s2 > s1: st.session_state.tymy.at[idx2, "Výhry"] += 1
+            
             st.session_state.historie.append({"Kolo": st.session_state.kolo, "Tým 1": t1, "Tým 2": t2, "S1": s1, "S2": s2})
         st.session_state.kolo += 1
         st.rerun()
+
+    if st.session_state.kolo > 1:
+        if col_undo.button("⬅️ Smazat poslední kolo (Oprava)"):
+            naposledy = st.session_state.kolo - 1
+            zápasy_k_mazání = [h for h in st.session_state.historie if h["Kolo"] == naposledy]
+            for h in zápasy_k_mazání:
+                idx1 = st.session_state.tymy[st.session_state.tymy["Tým"] == h["Tým 1"]].index[0]
+                idx2 = st.session_state.tymy[st.session_state.tymy["Tým"] == h["Tým 2"]].index[0]
+                st.session_state.tymy.at[idx1, "Skóre +"] -= h["S1"]
+                st.session_state.tymy.at[idx1, "Skóre -"] -= h["S2"]
+                st.session_state.tymy.at[idx2, "Skóre +"] -= h["S2"]
+                st.session_state.tymy.at[idx2, "Skóre -"] -= h["S1"]
+                if h["S1"] > h["S2"]: st.session_state.tymy.at[idx1, "Výhry"] -= 1
+                elif h["S2"] > h["S1"]: st.session_state.tymy.at[idx2, "Výhry"] -= 1
+            st.session_state.historie = [h for h in st.session_state.historie if h["Kolo"] != naposledy]
+            st.session_state.kolo = naposledy
+            st.rerun()
 
 # --- 3. KONEC ---
 else:
@@ -165,10 +202,11 @@ else:
     
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button("📥 PDF Výsledky", vytvor_pdf_bytes(res.reset_index(), st.session_state.nazev_akce, "vysledky"), "vysledky.pdf")
+        st.download_button("📥 PDF Výsledky", vytvor_pdf_bytes(res.reset_index(), st.session_state.nazev_akce, "vysledky"), "vysledky.pdf", "application/pdf")
     with col2:
-        st.download_button("📥 PDF Historie", vytvor_pdf_bytes(pd.DataFrame(st.session_state.historie), st.session_state.nazev_akce, "historie"), "historie.pdf")
+        h_df = pd.DataFrame(st.session_state.historie)
+        st.download_button("📥 PDF Historie", vytvor_pdf_bytes(h_df, st.session_state.nazev_akce, "historie"), "historie.pdf", "application/pdf")
     
-    if st.button("Nový turnaj"):
+    if st.button("Založit nový turnaj"):
         st.session_state.clear()
         st.rerun()
