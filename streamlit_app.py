@@ -79,6 +79,7 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
             pdf.ln()
     return pdf.output(dest='S').encode('latin-1', errors='replace')
 
+# --- LOGIKA TURNÁJE ---
 if 'kolo' not in st.session_state:
     if not nacti_z_google():
         st.session_state.update({'kolo': 0, 'historie': [], 'tymy': None, 'system': "Švýcar", 'nazev_akce': "Hradecká koule", 'max_kol': 3})
@@ -98,7 +99,8 @@ if st.session_state.kolo == 0:
             st.session_state.kolo = 1
             uloz_do_google()
             st.rerun()
-            elif st.session_state.kolo <= st.session_state.max_kol:
+
+elif st.session_state.kolo <= st.session_state.max_kol:
     zobraz_logo()
     st.header(f"🏟️ {st.session_state.nazev_akce} | Kolo {st.session_state.kolo}/{st.session_state.max_kol}")
     if st.session_state.system == "Švýcar":
@@ -120,7 +122,6 @@ if st.session_state.kolo == 0:
     for idx, (t1, t2) in enumerate(aktualni_rozpis):
         with st.expander(f"Hřiště {idx+1}: {t1} vs {t2}", expanded=True):
             if "VOLNÝ LOS" in [t1, t2]:
-                st.info("Volný los (13:0)")
                 vysledky_input.append((t1, t2, (13 if t2=="VOLNÝ LOS" else 0), (13 if t1=="VOLNÝ LOS" else 0)))
             else:
                 c1, c2 = st.columns(2)
@@ -141,6 +142,7 @@ if st.session_state.kolo == 0:
         st.session_state.kolo += 1
         uloz_do_google()
         st.rerun()
+
 else:
     zobraz_logo()
     st.title("🏁 Konečné výsledky")
