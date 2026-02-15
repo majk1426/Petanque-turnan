@@ -9,7 +9,6 @@ import json
 KLUB_NAZEV = "Club přátel pétanque HK"
 st.set_page_config(page_title=KLUB_NAZEV, layout="wide")
 
-# Propojení s Google Sheets
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
@@ -21,7 +20,6 @@ def zobraz_logo():
     else:
         st.subheader(KLUB_NAZEV)
 
-# --- FUNKCE PRO CLOUD ---
 def uloz_do_google():
     try:
         data_k_ulozeni = {
@@ -55,20 +53,15 @@ def nacti_z_google():
         return False
     return False
 
-# --- PDF GENERÁTOR ---
 def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
     pdf = FPDF()
     pdf.add_page()
     pismo = 'Arial'
-    if os.path.exists("DejaVuSans.ttf"):
-        pdf.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
-        pismo = 'DejaVu'
-    pdf.set_font(pismo, '', 16)
+    pdf.set_font(pismo, 'B', 16)
     pdf.cell(0, 10, KLUB_NAZEV, ln=True)
     pdf.set_font(pismo, '', 10)
     pdf.cell(0, 10, f"{typ.upper()}: {nazev_akce}", ln=True)
     pdf.ln(10)
-    
     if typ == "vysledky":
         df_clean = df[df["Tým"] != "VOLNÝ LOS"].copy()
         cols = ["Poz.", "Hráč/Tým", "V", "S+", "S-", "Diff"]
@@ -86,12 +79,10 @@ def vytvor_pdf_bytes(df, nazev_akce, typ="vysledky"):
             pdf.ln()
     return pdf.output(dest='S').encode('latin-1', errors='replace')
 
-# --- START APLIKACE ---
 if 'kolo' not in st.session_state:
     if not nacti_z_google():
         st.session_state.update({'kolo': 0, 'historie': [], 'tymy': None, 'system': "Švýcar", 'nazev_akce': "Hradecká koule", 'max_kol': 3})
 
-# --- 1. SETUP ---
 if st.session_state.kolo == 0:
     zobraz_logo()
     st.title("🏆 Turnajový manažer")
@@ -99,7 +90,6 @@ if st.session_state.kolo == 0:
     st.session_state.system = st.radio("Systém turnaje:", ["Švýcar", "Každý s každým"])
     st.session_state.max_kol = st.number_input("Počet kol:", 1, 10, st.session_state.max_kol)
     vstup = st.text_area("Seznam hráčů (každý na nový řádek):")
-    
     if st.button("Zahájit turnaj", type="primary"):
         hraci = [h.strip() for h in vstup.split('\n') if h.strip()]
         if len(hraci) >= 2:
@@ -108,12 +98,9 @@ if st.session_state.kolo == 0:
             st.session_state.kolo = 1
             uloz_do_google()
             st.rerun()
-
-# --- 2. PRŮBĚH ---
-elif st.session_state.kolo <= st.session_state.max_kol:
+            elif st.session_state.kolo <= st.session_state.max_kol:
     zobraz_logo()
     st.header(f"🏟️ {st.session_state.nazev_akce} | Kolo {st.session_state.kolo}/{st.session_state.max_kol}")
-    
     if st.session_state.system == "Švýcar":
         for i, r in st.session_state.tymy.iterrows():
             souperi = [h["Tým 2"] if h["Tým 1"] == r["Tým"] else h["Tým 1"] for h in st.session_state.historie if h["Tým 1"] == r["Tým"] or h["Tým 2"] == r["Tým"]]
@@ -123,14 +110,12 @@ elif st.session_state.kolo <= st.session_state.max_kol:
                 if not s_data.empty: bhz += s_data.iloc[0]["Výhry"]
             st.session_state.tymy.at[i, "Buchholz"] = bhz
             st.session_state.tymy.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
-        
         df_serazene = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
         serazene_list = df_serazene["Tým"].tolist()
         aktualni_rozpis = [(serazene_list[i], serazene_list[i+1]) for i in range(0, len(serazene_list), 2)]
     else:
         hraci = st.session_state.tymy["Tým"].tolist()
         aktualni_rozpis = [(hraci[i], hraci[len(hraci)-1-i]) for i in range(len(hraci)//2)]
-
     vysledky_input = []
     for idx, (t1, t2) in enumerate(aktualni_rozpis):
         with st.expander(f"Hřiště {idx+1}: {t1} vs {t2}", expanded=True):
@@ -142,12 +127,10 @@ elif st.session_state.kolo <= st.session_state.max_kol:
                 s1 = c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1_{st.session_state.kolo}_{idx}")
                 s2 = c2.number_input(f"Skóre {t2}", 0, 13, 0, key=f"s2_{st.session_state.kolo}_{idx}")
                 vysledky_input.append((t1, t2, s1, s2))
-
     if st.button("Uložit výsledky kola", type="primary"):
         for t1, t2, s1, s2 in vysledky_input:
             idx1 = st.session_state.tymy.index[st.session_state.tymy["Tým"] == t1][0]
             idx2 = st.session_state.tymy.index[st.session_state.tymy["Tým"] == t2][0]
-
             st.session_state.tymy.at[idx1, "Skóre +"] += s1
             st.session_state.tymy.at[idx1, "Skóre -"] += s2
             st.session_state.tymy.at[idx2, "Skóre +"] += s2
@@ -158,8 +141,6 @@ elif st.session_state.kolo <= st.session_state.max_kol:
         st.session_state.kolo += 1
         uloz_do_google()
         st.rerun()
-
-# --- 3. KONEC ---
 else:
     zobraz_logo()
     st.title("🏁 Konečné výsledky")
@@ -167,4 +148,10 @@ else:
     res["Rozdíl"] = res["Skóre +"] - res["Skóre -"]
     res = res.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False).reset_index(drop=True)
     res.index += 1
-    st.table(res[["Tým", "
+    st.table(res[["Tým", "Výhry", "Skóre +", "Skóre -", "Rozdíl"]])
+    st.download_button("📥 Stáhnout PDF výsledky", vytvor_pdf_bytes(res.reset_index(), st.session_state.nazev_akce, "vysledky"), "vysledky.pdf", "application/pdf")
+    if st.button("🗑️ Smazat turnaj a začít nový"):
+        df_empty = pd.DataFrame([{"stav_json": "{}"}])
+        conn.update(worksheet="Stav", data=df_empty)
+        st.session_state.clear()
+        st.rerun()
