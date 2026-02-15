@@ -122,4 +122,21 @@ elif st.session_state.kolo <= st.session_state.max_kol:
                 s_data = st.session_state.tymy[st.session_state.tymy["Tým"] == s]
                 if not s_data.empty: bhz += s_data.iloc[0]["Výhry"]
             st.session_state.tymy.at[i, "Buchholz"] = bhz
-            st.session_state.tymy.at[i, "Rozdíl"] = r["Skó
+            st.session_state.tymy.at[i, "Rozdíl"] = r["Skóre +"] - r["Skóre -"]
+        
+        df_serazene = st.session_state.tymy.sort_values(by=["Výhry", "Buchholz", "Rozdíl"], ascending=False)
+        serazene_list = df_serazene["Tým"].tolist()
+        aktualni_rozpis = [(serazene_list[i], serazene_list[i+1]) for i in range(0, len(serazene_list), 2)]
+    else:
+        hraci = st.session_state.tymy["Tým"].tolist()
+        aktualni_rozpis = [(hraci[i], hraci[len(hraci)-1-i]) for i in range(len(hraci)//2)]
+
+    vysledky_input = []
+    for idx, (t1, t2) in enumerate(aktualni_rozpis):
+        with st.expander(f"Hřiště {idx+1}: {t1} vs {t2}", expanded=True):
+            if "VOLNÝ LOS" in [t1, t2]:
+                st.info("Volný los (13:0)")
+                vysledky_input.append((t1, t2, (13 if t2=="VOLNÝ LOS" else 0), (13 if t1=="VOLNÝ LOS" else 0)))
+            else:
+                c1, c2 = st.columns(2)
+                s1 = c1.number_input(f"Skóre {t1}", 0, 13, 0, key=f"s1
