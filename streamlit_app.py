@@ -7,24 +7,27 @@ from streamlit_gsheets import GSheetsConnection
 # --- KONFIGURACE ---
 st.set_page_config(page_title="Pétanque Pro", layout="wide")
 
-# --- HESLO (Z SECRETS) ---
 def over_heslo():
     if "autentizovan" not in st.session_state:
         st.session_state.autentizovan = False
     
     if not st.session_state.autentizovan:
-        # Na Streamlitu nastavte v Secrets: access_password = "vaše_heslo"
-        # Pro lokální testování, pokud secrets neexistují, použije se 'admin123'
-        master_heslo = st.secrets.get("access_password", "admin123")
+        # Načtení hesla ze Secrets a ošetření (strip odstraní nechtěné mezery)
+        master_heslo = str(st.secrets.get("access_password", "admin123")).strip()
         
         st.title("🔒 Přístup omezen")
         vstup = st.text_input("Zadejte heslo turnaje:", type="password")
+        
         if st.button("Vstoupit"):
-            if vstup == master_heslo:
+            # .strip() použijeme i u vstupu, aby mezera na konci hesla nezpůsobila chybu
+            if vstup.strip() == master_heslo:
                 st.session_state.autentizovan = True
                 st.rerun()
             else:
                 st.error("Nesprávné heslo!")
+                # Malý trik pro debug: Pokud jsi admin, můžeš si dočasně nechat 
+                # vypsat, co si aplikace myslí, že je správné heslo (jen pro test!)
+                # st.write(f"DEBUG: Systém čeká: '{master_heslo}'") 
         st.stop()
 
 over_heslo()
