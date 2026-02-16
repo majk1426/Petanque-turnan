@@ -12,25 +12,29 @@ def over_heslo():
         st.session_state.autentizovan = False
     
     if not st.session_state.autentizovan:
-        # Načtení hesla ze Secrets a ošetření (strip odstraní nechtěné mezery)
-        master_heslo = str(st.secrets.get("access_password", "admin123")).strip()
+        # --- DEBUG START (Tyto řádky ti ukážou pravdu) ---
+        if "access_password" in st.secrets:
+             st.write(f"V Secrets nalezeno heslo: `{st.secrets['access_password']}`")
+        else:
+             st.write("V Secrets klíč 'access_password' VŮBEC NENÍ!")
+        # --- DEBUG KONEC ---
+
+        try:
+            master_heslo = str(st.secrets["access_password"]).strip()
+        except:
+            master_heslo = "admin123"
+            st.write("Používám nouzové heslo: `admin123`")
         
         st.title("🔒 Přístup omezen")
         vstup = st.text_input("Zadejte heslo turnaje:", type="password")
         
         if st.button("Vstoupit"):
-            # .strip() použijeme i u vstupu, aby mezera na konci hesla nezpůsobila chybu
             if vstup.strip() == master_heslo:
                 st.session_state.autentizovan = True
                 st.rerun()
             else:
-                st.error("Nesprávné heslo!")
-                # Malý trik pro debug: Pokud jsi admin, můžeš si dočasně nechat 
-                # vypsat, co si aplikace myslí, že je správné heslo (jen pro test!)
-                # st.write(f"DEBUG: Systém čeká: '{master_heslo}'") 
+                st.error(f"Nesprávné heslo! Zadal jsi: '{vstup.strip()}', ale systém čeká: '{master_heslo}'")
         st.stop()
-
-over_heslo()
 
 # --- PŘIPOJENÍ GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
